@@ -30,6 +30,10 @@ async function loopFolder(input, lvl = 1) {
 
   const files = await fs.promises.readdir(input);
   let promises = files.map(async file => {
+    if (file === '.DS_Store') {
+      return;
+    }
+
     const filePath = path.join(input, file)
     const stat = await fs.promises.stat(filePath);
 
@@ -38,7 +42,7 @@ async function loopFolder(input, lvl = 1) {
 
       if (!exists(filePath).length) {
         console.log(chalk.magenta('new file found'), filePath);
-      }else{
+      } else {
         console.log(chalk.red('already exists'), filePath);
       }
 
