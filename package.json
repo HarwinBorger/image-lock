@@ -1,0 +1,15 @@
+{
+  "name": "image-lock",
+  "version": "0.1",
+  "description": "Loop through all your images, do your actions on new image only and add them a lock file.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "type": "module",
+  "author": "Harwin Borger",
+  "license": "ISC",
+  "devDependencies": {
+    "chalk": "^5.0.0"
+  }
+}
