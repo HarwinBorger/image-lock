@@ -1,10 +1,16 @@
 import fs from 'fs';
 import path from 'path';
 import chalk from 'chalk';
+import process from 'process';
 
-var root = "./images";
+let [, , rootPath, debug] = process.argv;
 
 console.clear();
+
+if (rootPath === undefined) {
+  rootPath = "./images";
+}
+
 let lock = [];
 if (fs.existsSync('image-lock.json')) {
   lock = fs.readFileSync('image-lock.json');
@@ -12,17 +18,23 @@ if (fs.existsSync('image-lock.json')) {
 }
 
 const imageLock = [];
+createImageLock();
 
-loopFolder(root).then(() => {
-  console.log(imageLock)
-
-  fs.writeFile('./image-lock.json', JSON.stringify(imageLock, null, 2), err => {
-    if (err) {
-      console.error(err)
+function createImageLock() {
+  loopFolder(rootPath).then(() => {
+    if(debug){
+      console.log(imageLock)
     }
-    //file written successfully
-  })
-});
+
+    fs.writeFile('./image-lock.json', JSON.stringify(imageLock, null, 2), err => {
+      console.log('./image-lock.json written')
+      if (err) {
+        console.error(err)
+      }
+      //file written successfully
+    })
+  });
+}
 
 async function loopFolder(input, lvl = 1) {
   var indent = '|'.repeat(lvl);
