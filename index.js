@@ -27,28 +27,43 @@ if (rootPath === undefined) {
 const imageLock = {};
 imageLock.current = {};
 imageLock.new = {};
+
+
 if (fs.existsSync('image-lock.json')) {
   imageLock.current = fs.readFileSync('image-lock.json');
   imageLock.current = JSON.parse(imageLock.current);
   imageLock.new = imageLock.current;
 }
 
+const stats = {
+  files: 0,
+  new: 0,
+  keysNew: 0,
+  keysExists: 0,
+  deleted: 0
+}
+
 console.clear();
+console.log(chalk.cyan('Start image lock'));
 createImageLock();
 
 
 function createImageLock() {
-  console.log(chalk.cyan('----------imageLock current:----------'));
-  console.log(imageLock.current)
-  console.log(chalk.cyan('----------start looping:----------'));
+  if (argv.file) {
+    console.log(imageLock.current)
+  }
   loopFolder(rootPath).then(() => {
-    if (argv.debug) {
-      console.log(chalk.cyan('----------imageLock new:----------'));
+    if (argv.file) {
       console.log(imageLock.new)
     }
 
     fs.writeFile('./image-lock.json', JSON.stringify(imageLock.new, null, 2), err => {
-      console.log('./image-lock.json written')
+      process.stdout.write('\n');
+      console.log('./image-lock.json written:');
+      console.log('------------------------------');
+      console.log(`${chalk.green(stats.new)}\t new image \n${chalk.magenta(stats.keysNew)}\t keys added \n${chalk.yellow(stats.keysExists)}\t keys ignored \n${chalk.red(stats.deleted)}\t deleted`);
+      console.log('------------------------------');
+      console.log(chalk.green('Done!'));
       if (err) {
         console.error(err)
       }
@@ -65,7 +80,6 @@ function createImageLock() {
  */
 async function loopFolder(input, lvl = 1) {
   const indent = '|'.repeat(lvl);
-  console.log(chalk.blue(`${indent} Open folder:`), input);
 
   const files = await fs.promises.readdir(input);
   let promises = files.map(async file => {
@@ -77,11 +91,17 @@ async function loopFolder(input, lvl = 1) {
     const stat = await fs.promises.stat(filePath);
     const timeStamp = stat.ctime.toISOString();
     if (stat.isFile()) {
+      stats.files ++;
       if (!imageLockEntryExists(filePath, argv.key, timeStamp)) {
         createImageLockEntry(filePath, argv.key, timeStamp);
       } else {
-        console.log(chalk.yellow(`- key '${argv.key}' already exists:`), filePath);
+        stats.keysExists ++;
+        if (argv.debug) {
+          console.log(chalk.yellow(`- key '${argv.key}' already exists:`), filePath);
+        }
       }
+
+      updateProcess();
 
     } else if (stat.isDirectory()) {
       await loopFolder(filePath, lvl + 1);
@@ -91,7 +111,7 @@ async function loopFolder(input, lvl = 1) {
   })
 
   return await Promise.all(promises).then((files) => {
-    console.log(chalk.blue(`${indent} Done folder:`), input);
+//    console.log(files);
   });
 }
 
@@ -110,16 +130,47 @@ function imageLockEntryExists(filePath, key, timeStamp) {
   return imageLock.current[filePath][key] === timeStamp;
 }
 
-function createImageLockEntry(filePath, key, timeStamp){
+function createImageLockEntry(filePath, key, timeStamp) {
 
   if (!imageLock.new.hasOwnProperty(filePath)) {
-    console.log(chalk.green(`New file found:`), filePath);
+    stats.new ++;
     imageLock.new[filePath] = {};
+
+    if (argv.debug) {
+      console.log(chalk.green(`New file found:`), filePath);
+    }
   }
 
   if (!imageLock.new[filePath].hasOwnProperty(key)) {
-    console.log(chalk.magenta(`New key found for:`), filePath);
+    stats.keysNew ++;
+
+    if (argv.debug) {
+      console.log(chalk.magenta(`New key found for:`), filePath);
+    }
   }
 
   imageLock.new[filePath][key] = timeStamp;
+}
+
+function updateProcess() {
+  if (argv.debug) {
+    return;
+  }
+
+  let currentProcess = '|';
+  if (stats.files < 10) {
+    currentProcess += '|'.repeat(stats.files);
+  } else if (stats.files < 100) {
+    currentProcess += '|'.repeat(10);
+    currentProcess += '|'.repeat(stats.files / 10);
+  } else if (stats.files < 1000) {
+    currentProcess += '|'.repeat(20);
+    currentProcess += '|'.repeat(stats.files / 100);
+  } else if (stats.files < 10000) {
+    currentProcess += '|'.repeat(30);
+    currentProcess += '|'.repeat(stats.files / 1000);
+  }
+  process.stdout.clearLine();
+  process.stdout.cursorTo(0);
+  process.stdout.write(currentProcess + ' - ' + stats.files.toString() + ' files.');
 }
