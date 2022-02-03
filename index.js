@@ -68,7 +68,7 @@ function createImageLock() {
         process.stdout.write('\n');
         console.log(`${chalk.yellow('./image-lock.json')} successful written:`);
         console.log('------------------------------');
-        console.log(`${chalk.green(stats.new)}\t new image \n${chalk.magenta(stats.keysNew)}\t keys added \n${chalk.yellow(stats.keysExists)}\t keys ignored \n${chalk.red(stats.deleted)}\t deleted`);
+        console.log(`${chalk.green(stats.new)}\t images new \n${chalk.red(stats.deleted)}\t images deleted\n${chalk.magenta(stats.keysNew)}\t keys added \n${chalk.yellow(stats.keysExists)}\t keys ignored \n`);
         console.log('------------------------------');
         console.log(chalk.green('Done!'));
       }
@@ -194,7 +194,6 @@ function removeOldEntries(newEntries, oldEntries) {
   if (oldEntries.length > 0) {
     for (let entry of oldEntries) {
       if (newEntries[entry]) {
-        console.log('delete',entry);
         delete newEntries[entry]
         stats.deleted ++;
       } else {
