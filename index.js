@@ -1,32 +1,53 @@
+#!/usr/bin/env node
 import fs from 'fs';
 import path from 'path';
 import chalk from 'chalk';
 import process from 'process';
+import yargs from 'yargs';
+import {hideBin} from 'yargs/helpers';
 
-let [, , rootPath, debug] = process.argv;
+const argv = yargs(hideBin(process.argv)).usage('Usage: $0 [options]')
+                                         .example('$0 --key keyname', 'set a key for each different action you want to log')
+                                         .alias('k', 'key').nargs('k', 1).describe('k', 'Set unique key')
+                                         .demandOption(['k'])
+                                         .alias('d', 'debug').describe('d', 'Debug')
+                                         .alias('p', 'path').describe('p', 'Path')
+                                         .demandOption(['k'])
+                                         .help('h')
+                                         .alias('h', 'help')
+                                         .locale('en')
+                                         .epilog('copyright 2022').argv;
 
-console.clear();
+let rootPath = argv.path;
 
 if (rootPath === undefined) {
   rootPath = "./images";
 }
 
-let lock = [];
+const imageLock = {};
+imageLock.current = {};
+imageLock.new = {};
 if (fs.existsSync('image-lock.json')) {
-  lock = fs.readFileSync('image-lock.json');
-  lock = JSON.parse(lock);
+  imageLock.current = fs.readFileSync('image-lock.json');
+  imageLock.current = JSON.parse(imageLock.current);
+  imageLock.new = imageLock.current;
 }
 
-const imageLock = [];
+console.clear();
 createImageLock();
 
+
 function createImageLock() {
+  console.log(chalk.cyan('----------imageLock current:----------'));
+  console.log(imageLock.current)
+  console.log(chalk.cyan('----------start looping:----------'));
   loopFolder(rootPath).then(() => {
-    if(debug){
-      console.log(imageLock)
+    if (argv.debug) {
+      console.log(chalk.cyan('----------imageLock new:----------'));
+      console.log(imageLock.new)
     }
 
-    fs.writeFile('./image-lock.json', JSON.stringify(imageLock, null, 2), err => {
+    fs.writeFile('./image-lock.json', JSON.stringify(imageLock.new, null, 2), err => {
       console.log('./image-lock.json written')
       if (err) {
         console.error(err)
@@ -36,8 +57,14 @@ function createImageLock() {
   });
 }
 
+/**
+ * LoopFolder
+ * @param input
+ * @param lvl
+ * @returns {Promise<string[]>}
+ */
 async function loopFolder(input, lvl = 1) {
-  var indent = '|'.repeat(lvl);
+  const indent = '|'.repeat(lvl);
   console.log(chalk.blue(`${indent} Open folder:`), input);
 
   const files = await fs.promises.readdir(input);
@@ -48,17 +75,14 @@ async function loopFolder(input, lvl = 1) {
 
     const filePath = path.join(input, file)
     const stat = await fs.promises.stat(filePath);
-
+    const timeStamp = stat.ctime.toISOString();
     if (stat.isFile()) {
-      console.log(chalk.yellow(`${indent}- Found file:`), filePath, stat.ctime);
-
-      if (!exists(filePath).length) {
-        console.log(chalk.magenta('new file found'), filePath);
+      if (!imageLockEntryExists(filePath, argv.key, timeStamp)) {
+        createImageLockEntry(filePath, argv.key, timeStamp);
       } else {
-        console.log(chalk.red('already exists'), filePath);
+        console.log(chalk.yellow(`- key '${argv.key}' already exists:`), filePath);
       }
 
-      imageLock.push({'path': filePath, 'ctime': stat.ctime});
     } else if (stat.isDirectory()) {
       await loopFolder(filePath, lvl + 1);
     }
@@ -67,12 +91,35 @@ async function loopFolder(input, lvl = 1) {
   })
 
   return await Promise.all(promises).then((files) => {
-    console.log(chalk.green(`${indent} Done folder:`), input);
+    console.log(chalk.blue(`${indent} Done folder:`), input);
   });
 }
 
-function exists(input) {
-  return lock.filter(function (item) {
-    return item.path === input;
-  });
+function imageLockEntryExists(filePath, key, timeStamp) {
+  // does file exist?
+  if (!imageLock.current.hasOwnProperty(filePath)) {
+    return false;
+  }
+
+  // does key exist?
+  if (!imageLock.current[filePath].hasOwnProperty(key)) {
+    return false;
+  }
+
+  // does timestamp math?
+  return imageLock.current[filePath][key] === timeStamp;
+}
+
+function createImageLockEntry(filePath, key, timeStamp){
+
+  if (!imageLock.new.hasOwnProperty(filePath)) {
+    console.log(chalk.green(`New file found:`), filePath);
+    imageLock.new[filePath] = {};
+  }
+
+  if (!imageLock.new[filePath].hasOwnProperty(key)) {
+    console.log(chalk.magenta(`New key found for:`), filePath);
+  }
+
+  imageLock.new[filePath][key] = timeStamp;
 }
