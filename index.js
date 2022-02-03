@@ -27,6 +27,7 @@ if (rootPath === undefined) {
 const imageLock = {};
 imageLock.current = {};
 imageLock.new = {};
+imageLock.difference = [];
 
 
 if (fs.existsSync('image-lock.json')) {
@@ -57,15 +58,19 @@ function createImageLock() {
       console.log(imageLock.new)
     }
 
+    const oldEntries = difference({...imageLock.new}, imageLock.difference);
+    imageLock.new = removeOldEntries(imageLock.new, Object.keys(oldEntries));
+
     fs.writeFile('./image-lock.json', JSON.stringify(imageLock.new, null, 2), err => {
-      process.stdout.write('\n');
-      console.log('./image-lock.json written:');
-      console.log('------------------------------');
-      console.log(`${chalk.green(stats.new)}\t new image \n${chalk.magenta(stats.keysNew)}\t keys added \n${chalk.yellow(stats.keysExists)}\t keys ignored \n${chalk.red(stats.deleted)}\t deleted`);
-      console.log('------------------------------');
-      console.log(chalk.green('Done!'));
       if (err) {
         console.error(err)
+      } else {
+        process.stdout.write('\n');
+        console.log(`${chalk.yellow('./image-lock.json')} successful written:`);
+        console.log('------------------------------');
+        console.log(`${chalk.green(stats.new)}\t new image \n${chalk.magenta(stats.keysNew)}\t keys added \n${chalk.yellow(stats.keysExists)}\t keys ignored \n${chalk.red(stats.deleted)}\t deleted`);
+        console.log('------------------------------');
+        console.log(chalk.green('Done!'));
       }
       //file written successfully
     })
@@ -92,6 +97,7 @@ async function loopFolder(input, lvl = 1) {
     const timeStamp = stat.ctime.toISOString();
     if (stat.isFile()) {
       stats.files ++;
+
       if (!imageLockEntryExists(filePath, argv.key, timeStamp)) {
         createImageLockEntry(filePath, argv.key, timeStamp);
       } else {
@@ -101,8 +107,8 @@ async function loopFolder(input, lvl = 1) {
         }
       }
 
+      imageLock.difference.push(filePath);
       updateProcess();
-
     } else if (stat.isDirectory()) {
       await loopFolder(filePath, lvl + 1);
     }
@@ -173,4 +179,27 @@ function updateProcess() {
   process.stdout.clearLine();
   process.stdout.cursorTo(0);
   process.stdout.write(currentProcess + ' - ' + stats.files.toString() + ' files.');
+}
+
+function difference(setA, setB) {
+  let _difference = setA;
+  for (let elem of setB) {
+    delete _difference[elem];
+  }
+  return _difference
+}
+
+function removeOldEntries(newEntries, oldEntries) {
+  console.log(oldEntries);
+  if (oldEntries.length > 0) {
+    for (let entry of oldEntries) {
+      if (newEntries[entry]) {
+        console.log('delete',entry);
+        delete newEntries[entry]
+        stats.deleted ++;
+      } else {
+      }
+    }
+  }
+  return newEntries
 }
