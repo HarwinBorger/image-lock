@@ -5,14 +5,16 @@ import chalk from 'chalk';
 import process from 'process';
 import yargs from 'yargs';
 import {hideBin} from 'yargs/helpers';
+import imagemin from 'imagemin';
+import imageminWebp from 'imagemin-webp';
+import chokidar from 'chokidar';
 
 const argv = yargs(hideBin(process.argv)).usage('Usage: $0 [options]')
-                                         .example('$0 --key keyname', 'set a key for each different action you want to log')
-                                         .alias('k', 'key').nargs('k', 1).describe('k', 'Set unique key')
-                                         .demandOption(['k'])
-                                         .alias('d', 'debug').describe('d', 'Debug')
-                                         .alias('p', 'path').describe('p', 'Path')
-                                         .demandOption(['k'])
+                                         .example('$0 --action keyname', 'set a action for each different action you want to log')
+                                         .describe('a', 'Set unique action').alias('a', 'action').nargs('a', 1).demandOption(['action'])
+                                         .describe('d', 'Debug').alias('d', 'debug')
+                                         .describe('p', 'Path').alias('p', 'path')
+                                         .describe('watch', 'Watch')
                                          .help('h')
                                          .alias('h', 'help')
                                          .locale('en')
@@ -39,21 +41,30 @@ if (fs.existsSync('image-lock.json')) {
 const stats = {
   files: 0,
   new: 0,
-  keysNew: 0,
-  keysExists: 0,
-  deleted: 0
+  actionsNew: 0,
+  actionsExists: 0,
+  actionsFound: 0,
+  actionsDone: 0,
+  deleted: 0,
 }
 
 console.clear();
 console.log(chalk.cyan('Start image lock'));
-createImageLock();
+if (argv.watch) {
+  watch();
+} else {
+  run();
+}
 
-
-function createImageLock() {
+/**
+ * Init
+ */
+function run() {
   if (argv.file) {
     console.log(imageLock.current)
   }
-  loopFolder(rootPath).then(() => {
+
+  loopFiles(rootPath).then(() => {
     if (argv.file) {
       console.log(imageLock.new)
     }
@@ -61,56 +72,98 @@ function createImageLock() {
     const oldEntries = difference({...imageLock.new}, imageLock.difference);
     imageLock.new = removeOldEntries(imageLock.new, Object.keys(oldEntries));
 
-    fs.writeFile('./image-lock.json', JSON.stringify(imageLock.new, null, 2), err => {
-      if (err) {
-        console.error(err)
-      } else {
-        process.stdout.write('\n');
-        console.log(`${chalk.yellow('./image-lock.json')} successful written:`);
-        console.log('------------------------------');
-        console.log(`${chalk.green(stats.new)}\t images new \n${chalk.red(stats.deleted)}\t images deleted\n${chalk.magenta(stats.keysNew)}\t keys added \n${chalk.yellow(stats.keysExists)}\t keys ignored \n`);
-        console.log('------------------------------');
-        console.log(chalk.green('Done!'));
-      }
-      //file written successfully
-    })
+    createImageLockFile();
+  });
+}
+
+function watch() {
+  console.log('start watching...');
+  console.error(chalk.yellow('Please note: Watch function not writing image-lock.json yet...'));
+  const watcher = chokidar.watch(rootPath, {
+    ignored: /(^|[\/\\])\../, // ignore dotfiles
+    persistent: true,
+    ignoreInitial: true,
+  });
+
+// Something to use when events are received.
+  const log = console.log.bind(console);
+// Add event listeners.
+  watcher
+    .on('add', path => log(`File ${path} has been added`))
+    .on('change', path => log(`File ${path} has been changed`))
+    .on('unlink', path => log(`File ${path} has been removed`))
+    .on('ready', () => {
+      run();
+    });
+
+  process.on('SIGINT', () => {
+    watcher.close().then(()=>{
+      console.log('\nWatching Image Lock successful stopped... ');
+      console.log(chalk.red('File not saved yet... this needs to be build.'));
+    });
   });
 }
 
 /**
- * LoopFolder
- * @param input
- * @param lvl
+ * Create Image Lock File
+ */
+function createImageLockFile() {
+  fs.writeFile('./image-lock.json', JSON.stringify(imageLock.new, null, 2), err => {
+    if (err) {
+      console.error(err)
+    } else {
+      process.stdout.write('\n');
+      console.log(`${chalk.yellow('./image-lock.json')} successful written:`);
+      console.log('------------------------------');
+      console.log(`${chalk.green(stats.new)}\t images new \n${chalk.red(stats.deleted)}\t images deleted\n${chalk.magenta(stats.actionsNew)}\t actions added \n${chalk.yellow(stats.actionsExists)}\t actions ignored \n`);
+      console.log('------------------------------');
+      console.log(chalk.green('Done!', `${performance.now().toFixed(0)}ms`));
+    }
+    //file written successfully
+  })
+}
+
+/**
+ * Loop Files§
+ * @param inputPath
  * @returns {Promise<string[]>}
  */
-async function loopFolder(input, lvl = 1) {
-  const indent = '|'.repeat(lvl);
-
-  const files = await fs.promises.readdir(input);
+async function loopFiles(inputPath) {
+  const files = await fs.promises.readdir(inputPath);
   let promises = files.map(async file => {
     if (file === '.DS_Store') {
       return;
     }
 
-    const filePath = path.join(input, file)
+    const filePath = path.join(inputPath, file)
     const stat = await fs.promises.stat(filePath);
     const timeStamp = stat.ctime.toISOString();
+
     if (stat.isFile()) {
       stats.files ++;
 
-      if (!imageLockEntryExists(filePath, argv.key, timeStamp)) {
-        createImageLockEntry(filePath, argv.key, timeStamp);
+      if (!imageLockActionExists(filePath, argv.action, timeStamp)) {
+        updateProcess();
+        stats.actionsFound ++;
+
+        await runAction(inputPath, file).then(() => {
+          stats.actionsDone ++;
+          updateProcess();
+        });
+        
+        addImageLockAction(filePath, argv.action, timeStamp);
       } else {
-        stats.keysExists ++;
+        stats.actionsExists ++;
+
         if (argv.debug) {
-          console.log(chalk.yellow(`- key '${argv.key}' already exists:`), filePath);
+          console.log(chalk.yellow(`- action '${argv.action}' already exists:`), filePath);
         }
       }
 
       imageLock.difference.push(filePath);
       updateProcess();
     } else if (stat.isDirectory()) {
-      await loopFolder(filePath, lvl + 1);
+      await loopFiles(filePath);
     }
 
     return filePath;
@@ -121,64 +174,86 @@ async function loopFolder(input, lvl = 1) {
   });
 }
 
-function imageLockEntryExists(filePath, key, timeStamp) {
+/**
+ * Run Action
+ * @param inputPath
+ * @param file
+ * @returns {Promise<void>}
+ */
+async function runAction(inputPath, file) {
+  if(argv.action !== 'webp'){
+    return;
+  }
+
+  const filePath = path.join(inputPath, file);
+  await imagemin([filePath], {
+    destination: path.join('build/images', inputPath),
+    plugins: [
+      imageminWebp({quality: 50})
+    ]
+  });
+}
+
+async function runActionDeleted(inputPath, file){
+  // perform action for removal of file
+}
+
+
+function imageLockActionExists(filePath, action, timeStamp) {
   // does file exist?
   if (!imageLock.current.hasOwnProperty(filePath)) {
     return false;
   }
 
-  // does key exist?
-  if (!imageLock.current[filePath].hasOwnProperty(key)) {
+  // does action exist?
+  if (!imageLock.current[filePath].hasOwnProperty(action)) {
     return false;
   }
 
   // does timestamp math?
-  return imageLock.current[filePath][key] === timeStamp;
+  return imageLock.current[filePath][action] === timeStamp;
 }
 
-function createImageLockEntry(filePath, key, timeStamp) {
+function addImageLockAction(filePath, action, timeStamp) {
 
   if (!imageLock.new.hasOwnProperty(filePath)) {
-    stats.new ++;
+    // Create new file entry
     imageLock.new[filePath] = {};
 
+    // Write stats
+    stats.new ++;
+
+    // Debug
     if (argv.debug) {
       console.log(chalk.green(`New file found:`), filePath);
     }
   }
 
-  if (!imageLock.new[filePath].hasOwnProperty(key)) {
-    stats.keysNew ++;
+  if (!imageLock.new[filePath].hasOwnProperty(action)) {
+    // Create
+    imageLock.new[filePath][action] = timeStamp;
 
+    // Write stats
+    stats.actionsNew ++;
+
+    // Debug
     if (argv.debug) {
-      console.log(chalk.magenta(`New key found for:`), filePath);
+      console.log(chalk.magenta(`New action found for:`), filePath);
     }
   }
-
-  imageLock.new[filePath][key] = timeStamp;
 }
 
+/**
+ * Update process
+ */
 function updateProcess() {
   if (argv.debug) {
     return;
   }
 
-  let currentProcess = '|';
-  if (stats.files < 10) {
-    currentProcess += '|'.repeat(stats.files);
-  } else if (stats.files < 100) {
-    currentProcess += '|'.repeat(10);
-    currentProcess += '|'.repeat(stats.files / 10);
-  } else if (stats.files < 1000) {
-    currentProcess += '|'.repeat(20);
-    currentProcess += '|'.repeat(stats.files / 100);
-  } else if (stats.files < 10000) {
-    currentProcess += '|'.repeat(30);
-    currentProcess += '|'.repeat(stats.files / 1000);
-  }
   process.stdout.clearLine();
   process.stdout.cursorTo(0);
-  process.stdout.write(currentProcess + ' - ' + stats.files.toString() + ' files.');
+  process.stdout.write(`${stats.files.toString()} files found. Of which ${stats.actionsFound} new actions. Performing actions: ${stats.actionsDone.toString()}/${stats.actionsFound.toString()}...`);
 }
 
 function difference(setA, setB) {
@@ -190,7 +265,6 @@ function difference(setA, setB) {
 }
 
 function removeOldEntries(newEntries, oldEntries) {
-  console.log(oldEntries);
   if (oldEntries.length > 0) {
     for (let entry of oldEntries) {
       if (newEntries[entry]) {
