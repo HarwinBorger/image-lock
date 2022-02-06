@@ -42,6 +42,7 @@ const stats = {
   files: 0,
   new: 0,
   actionsNew: 0,
+  actionsUpdated: 0,
   actionsExists: 0,
   actionsFound: 0,
   actionsDone: 0,
@@ -97,9 +98,9 @@ function watch() {
     });
 
   process.on('SIGINT', () => {
-    watcher.close().then(()=>{
-      console.log('\nWatching Image Lock successful stopped... ');
-      console.log(chalk.red('File not saved yet... this needs to be build.'));
+    watcher.close().then(() => {
+      console.log('\nWatching Image Lock successful stopped...');
+      console.log(`${chalk.red('image-lock.json not saved yet... ')} I am still working on it!`);
     });
   });
 }
@@ -115,7 +116,13 @@ function createImageLockFile() {
       process.stdout.write('\n');
       console.log(`${chalk.yellow('./image-lock.json')} successful written:`);
       console.log('------------------------------');
-      console.log(`${chalk.green(stats.new)}\t images new \n${chalk.red(stats.deleted)}\t images deleted\n${chalk.magenta(stats.actionsNew)}\t actions added \n${chalk.yellow(stats.actionsExists)}\t actions ignored \n`);
+      console.log(`
+  ${chalk.green(stats.new)}\t images new
+  ${chalk.red(stats.deleted)}\t images deleted
+  ${chalk.magenta(stats.actionsNew)}\t actions added
+  ${chalk.cyan(stats.actionsUpdated)}\t actions updated
+  ${chalk.yellow(stats.actionsExists)}\t actions ignored
+      `);
       console.log('------------------------------');
       console.log(chalk.green('Done!', `${performance.now().toFixed(0)}ms`));
     }
@@ -137,7 +144,7 @@ async function loopFiles(inputPath) {
 
     const filePath = path.join(inputPath, file)
     const stat = await fs.promises.stat(filePath);
-    const timeStamp = stat.ctime.toISOString();
+    const timeStamp = stat.atime.toISOString();
 
     if (stat.isFile()) {
       stats.files ++;
@@ -150,7 +157,7 @@ async function loopFiles(inputPath) {
           stats.actionsDone ++;
           updateProcess();
         });
-        
+
         addImageLockAction(filePath, argv.action, timeStamp);
       } else {
         stats.actionsExists ++;
@@ -181,7 +188,7 @@ async function loopFiles(inputPath) {
  * @returns {Promise<void>}
  */
 async function runAction(inputPath, file) {
-  if(argv.action !== 'webp'){
+  if (argv.action !== 'webp') {
     return;
   }
 
@@ -194,7 +201,7 @@ async function runAction(inputPath, file) {
   });
 }
 
-async function runActionDeleted(inputPath, file){
+async function runActionDeleted(inputPath, file) {
   // perform action for removal of file
 }
 
@@ -229,10 +236,8 @@ function addImageLockAction(filePath, action, timeStamp) {
     }
   }
 
+  // Log new action
   if (!imageLock.new[filePath].hasOwnProperty(action)) {
-    // Create
-    imageLock.new[filePath][action] = timeStamp;
-
     // Write stats
     stats.actionsNew ++;
 
@@ -240,7 +245,18 @@ function addImageLockAction(filePath, action, timeStamp) {
     if (argv.debug) {
       console.log(chalk.magenta(`New action found for:`), filePath);
     }
+  } else if (imageLock.new[filePath][action] !== timeStamp) {
+    // Write stats
+    stats.actionsUpdated ++;
+
+    // Debug
+    if (argv.debug) {
+      console.log(chalk.magenta(`Updated action found for:`), filePath);
+    }
   }
+
+  // Create/Update action
+  imageLock.new[filePath][action] = timeStamp;
 }
 
 /**
