@@ -127,6 +127,7 @@ function createImageLockFile() {
   ${chalk.red('x')}\t actions removed (not supported yet)
   \t ------------
   ${chalk.green(stats.tasksPerformed)}\t ${chalk.bold('tasks performed')}
+  ${chalk.green('x')}\t ${chalk.bold('removal tasks performed (not supported yet)')}
 ------------------------------
       `);
       console.log(chalk.green('✓ Done!', `${performance.now().toFixed(0)}ms`));
@@ -285,6 +286,13 @@ function difference(setA, setB) {
   return _difference
 }
 
+/**
+ * Remove Old Entries
+ * TODO decide whether to remove the image entry or just the action.
+ * @param newEntries
+ * @param oldEntries
+ * @returns {*}
+ */
 function removeOldEntries(newEntries, oldEntries) {
   if (oldEntries.length > 0) {
     for (let entry of oldEntries) {
