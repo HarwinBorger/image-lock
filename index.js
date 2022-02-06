@@ -40,13 +40,14 @@ if (fs.existsSync('image-lock.json')) {
 
 const stats = {
   files: 0,
-  new: 0,
+  imagesNew: 0,
+  imagesDeleted: 0,
   actionsNew: 0,
   actionsUpdated: 0,
   actionsExists: 0,
   actionsFound: 0,
-  actionsDone: 0,
-  deleted: 0,
+  actionsRemoved: 0, // TODO build in
+  tasksPerformed: 0,
 }
 
 console.clear();
@@ -115,16 +116,20 @@ function createImageLockFile() {
     } else {
       process.stdout.write('\n');
       console.log(`${chalk.yellow('./image-lock.json')} successful written:`);
-      console.log('------------------------------');
       console.log(`
-  ${chalk.green(stats.new)}\t images new
-  ${chalk.red(stats.deleted)}\t images deleted
-  ${chalk.magenta(stats.actionsNew)}\t actions added
+------------------------------
+  ${chalk.green(stats.imagesNew)}\t images new
+  ${chalk.red(stats.imagesDeleted)}\t images deleted
+  \t ------------
+  ${chalk.magenta(stats.actionsNew)}\t actions registered
   ${chalk.cyan(stats.actionsUpdated)}\t actions updated
   ${chalk.yellow(stats.actionsExists)}\t actions ignored
+  ${chalk.red('x')}\t actions removed (not supported yet)
+  \t ------------
+  ${chalk.green(stats.tasksPerformed)}\t ${chalk.bold('tasks performed')}
+------------------------------
       `);
-      console.log('------------------------------');
-      console.log(chalk.green('Done!', `${performance.now().toFixed(0)}ms`));
+      console.log(chalk.green('✓ Done!', `${performance.now().toFixed(0)}ms`));
     }
     //file written successfully
   })
@@ -154,7 +159,7 @@ async function loopFiles(inputPath) {
         stats.actionsFound ++;
 
         await runAction(inputPath, file).then(() => {
-          stats.actionsDone ++;
+          stats.tasksPerformed ++;
           updateProcess();
         });
 
@@ -228,7 +233,7 @@ function addImageLockAction(filePath, action, timeStamp) {
     imageLock.new[filePath] = {};
 
     // Write stats
-    stats.new ++;
+    stats.imagesNew ++;
 
     // Debug
     if (argv.debug) {
@@ -269,7 +274,7 @@ function updateProcess() {
 
   process.stdout.clearLine();
   process.stdout.cursorTo(0);
-  process.stdout.write(`${stats.files.toString()} files found. Of which ${stats.actionsFound} new actions. Performing actions: ${stats.actionsDone.toString()}/${stats.actionsFound.toString()}...`);
+  process.stdout.write(`${stats.files.toString()} files found. Of which ${stats.actionsFound} new actions. Performing tasks: ${stats.tasksPerformed.toString()}/${stats.actionsFound.toString()}...`);
 }
 
 function difference(setA, setB) {
@@ -285,7 +290,7 @@ function removeOldEntries(newEntries, oldEntries) {
     for (let entry of oldEntries) {
       if (newEntries[entry]) {
         delete newEntries[entry]
-        stats.deleted ++;
+        stats.imagesDeleted ++;
       } else {
       }
     }
