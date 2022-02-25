@@ -1,14 +1,14 @@
 import fs from 'fs';
-import Stats from './Stats.js';
+import Stats from './Stats.mjs';
 import chalk from "chalk";
-import {difference} from "./utils.js";
+import {difference} from "./utils.mjs";
 
 export default class LockFile {
   file;
   stats;
   lockFilePath = './image-lock.json';
 
-  constructor(argv) {
+  constructor({ debug = false }) {
     /**
      * @type {{new: {}, current: {}, difference: {}}}
      */
@@ -18,12 +18,7 @@ export default class LockFile {
       difference: [],
     }
 
-    /**
-     * @type {(...data: any[]) => void}
-     */
-    if (argv) {
-      this.isDebug = argv.debug;
-    }
+    this.isDebug = debug;
 
     /**
      * @type {Stats}
@@ -162,7 +157,7 @@ export default class LockFile {
    *
    * @param filePath
    */
-  addDifferenceEntry(filePath){
+  addDifferenceEntry(filePath) {
     this.file.difference.push(filePath);
   }
 }

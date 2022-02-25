@@ -20,7 +20,7 @@ if (rootPath === undefined) {
   rootPath = "./images";
 }
 
-const imageLock = new ImageLock(argv);
+const imageLock = new ImageLock({ path: argv.path, action: argv.action, debug: argv.debug });
 
 // If --watch then start watch
 argv.watch ? imageLock.watch() : imageLock.run();

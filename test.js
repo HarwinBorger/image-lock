@@ -2,5 +2,5 @@
 
 import {ImageLock} from "./index.mjs";
 
-const imageLock = new ImageLock();
+const imageLock = new ImageLock({path: './images', action: 'webp', debug: false});
 imageLock.run();
