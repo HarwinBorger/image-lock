@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 import fs from 'fs';
 import path from 'path';
 import chalk from 'chalk';
@@ -8,6 +9,8 @@ import {hideBin} from 'yargs/helpers';
 import imagemin from 'imagemin';
 import imageminWebp from 'imagemin-webp';
 import chokidar from 'chokidar';
+import Stats from './src/Stats.js';
+
 
 const argv = yargs(hideBin(process.argv)).usage('Usage: $0 [options]')
                                          .example('$0 --action keyname', 'set a action for each different action you want to log')
@@ -31,24 +34,9 @@ imageLock.current = {};
 imageLock.new = {};
 imageLock.difference = [];
 
+let timer = false;
 
-if (fs.existsSync('image-lock.json')) {
-  imageLock.current = fs.readFileSync('image-lock.json');
-  imageLock.current = JSON.parse(imageLock.current);
-  imageLock.new = imageLock.current;
-}
-
-const stats = {
-  files: 0,
-  imagesNew: 0,
-  imagesDeleted: 0,
-  actionsNew: 0,
-  actionsUpdated: 0,
-  actionsExists: 0,
-  actionsFound: 0,
-  actionsRemoved: 0, // TODO build in
-  tasksPerformed: 0,
-}
+let stats;
 
 console.clear();
 console.log(chalk.cyan('Start image lock'));
@@ -62,6 +50,16 @@ if (argv.watch) {
  * Init
  */
 function run() {
+  console.log('Run through files');
+  stats = new Stats();
+
+  if (fs.existsSync('image-lock.json')) {
+    imageLock.current = fs.readFileSync('image-lock.json');
+    imageLock.current = JSON.parse(imageLock.current);
+    imageLock.difference = []
+    imageLock.new = imageLock.current;
+  }
+
   if (argv.file) {
     console.log(imageLock.current)
   }
@@ -91,9 +89,18 @@ function watch() {
   const log = console.log.bind(console);
 // Add event listeners.
   watcher
-    .on('add', path => log(`File ${path} has been added`))
-    .on('change', path => log(`File ${path} has been changed`))
-    .on('unlink', path => log(`File ${path} has been removed`))
+    .on('add', path => {
+      log(`File ${path} has been added`)
+      runTimer();
+    })
+    .on('change', path => {
+      log(`File ${path} has been changed`)
+      runTimer();
+    })
+    .on('unlink', path => {
+      log(`File ${path} has been removed`)
+      runTimer();
+    })
     .on('ready', () => {
       run();
     });
@@ -104,6 +111,11 @@ function watch() {
       console.log(`${chalk.red('image-lock.json not saved yet... ')} I am still working on it!`);
     });
   });
+}
+
+function runTimer() {
+  clearTimeout(timer);
+  timer = setTimeout(() => run(), 100);
 }
 
 /**
@@ -150,7 +162,7 @@ async function loopFiles(inputPath) {
 
     const filePath = path.join(inputPath, file)
     const stat = await fs.promises.stat(filePath);
-    const timeStamp = stat.atime.toISOString();
+    const timeStamp = stat.mtime.toISOString();
 
     if (stat.isFile()) {
       stats.files ++;
@@ -187,6 +199,7 @@ async function loopFiles(inputPath) {
   });
 }
 
+
 /**
  * Run Action
  * @param inputPath
@@ -200,7 +213,7 @@ async function runAction(inputPath, file) {
 
   const filePath = path.join(inputPath, file);
   await imagemin([filePath], {
-    destination: path.join('build/images', inputPath),
+    destination: path.join('build', inputPath),
     plugins: [
       imageminWebp({quality: 50})
     ]
@@ -254,6 +267,7 @@ function addImageLockAction(filePath, action, timeStamp) {
   } else if (imageLock.new[filePath][action] !== timeStamp) {
     // Write stats
     stats.actionsUpdated ++;
+    console.log(chalk.red('action updated'+filePath));
 
     // Debug
     if (argv.debug) {
