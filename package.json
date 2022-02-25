@@ -10,7 +10,7 @@
   },
   "main": "index.mjs",
   "scripts": {
-    "test": "node index.js -a webp"
+    "test": "node ./bin/index.js -a webp"
   },
   "type": "module",
   "author": "Harwin Borger",
