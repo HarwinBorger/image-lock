@@ -1,5 +1,7 @@
+#!/usr/bin/env node
+
 import yargs from "yargs";
-import {hideBin} from "yargs/helpers/helpers.mjs";
+import {hideBin} from "yargs/helpers";
 import ImageLock from "../lib/ImageLock.mjs";
 
 const argv = yargs(hideBin(process.argv)).usage('Usage: $0 [options]')
@@ -18,7 +20,7 @@ if (rootPath === undefined) {
   rootPath = "./images";
 }
 
-const imageLock = new ImageLock();
+const imageLock = new ImageLock(argv);
 
 // If --watch then start watch
 argv.watch ? imageLock.watch() : imageLock.run();
