@@ -5,7 +5,8 @@
   "engines": {
     "node": ">=16.0.0"
   },
-  "main": "index.js",
+  "bin": "./bin/index.js",
+  "main": "index.mjs",
   "scripts": {
     "test": "node index.js -a webp"
   },

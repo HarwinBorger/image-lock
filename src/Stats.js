@@ -1,3 +1,6 @@
+/**
+ * Stats
+ */
 export default class Stats {
   constructor() {
     this.files = 0;
